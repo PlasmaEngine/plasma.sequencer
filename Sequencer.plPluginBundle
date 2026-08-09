@@ -1,0 +1,21 @@
+// for a description of the options see:
+// Code/EditorPlugins/Assets/EditorPluginAssets/Assets.plPluginBundle
+
+PluginInfo
+{
+	string %DisplayName{"Sequencer"}
+	string %Category{"Animation"}
+	string %MinEngineVersion{"0.8.0"}
+	string %MaxEngineVersion{"0.8.0"}
+	string %Icon{"SequencerIcon.png"}
+	string %Banner{"SequencerBanner.png"}
+	string %Description{"Cinematic timeline tool: Sequence assets that animate many scene objects, cut between cameras and fire events, plus the runtime player component."}
+	string %EditorPlugins{"plEditorPluginSequencer"}
+	string %EditorEnginePlugins{"plEnginePluginSequencer"}
+	string %RuntimePlugins{"plSequencerPlugin"}
+	string %PackageDependencies{}
+	string %RequiredPlugins{}
+	string %ExclusiveFeatures{}
+	string %EnabledInTemplates{}
+	string %PlasmaBuildTargetName{"SequencerPlugin"}
+}

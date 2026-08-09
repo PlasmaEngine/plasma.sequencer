@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Sequence asset icon: timeline lanes with keys and a playhead.
+       Palette: GetCategoryColor("Animation") PastelTeal #64BEB9, per the engine's
+       category-color rule for Animation assets. -->
+  <g fill="none" stroke="#64BEB9" stroke-width="3">
+    <rect x="6" y="10" width="52" height="44" rx="4"/>
+    <line x1="6" y1="22" x2="58" y2="22"/>
+  </g>
+  <!-- track lanes -->
+  <line x1="12" y1="33" x2="52" y2="33" stroke="#64BEB9" stroke-width="2" opacity="0.45"/>
+  <line x1="12" y1="43" x2="52" y2="43" stroke="#64BEB9" stroke-width="2" opacity="0.45"/>
+  <!-- keys -->
+  <rect x="17" y="29" width="8" height="8" transform="rotate(45 21 33)" fill="#64BEB9"/>
+  <rect x="37" y="29" width="8" height="8" transform="rotate(45 41 33)" fill="#64BEB9"/>
+  <rect x="27" y="39" width="8" height="8" transform="rotate(45 31 43)" fill="#64BEB9"/>
+  <!-- playhead -->
+  <line x1="34" y1="22" x2="34" y2="54" stroke="#64BEB9" stroke-width="2.5"/>
+  <path d="M 30 22 L 38 22 L 34 28 Z" fill="#64BEB9"/>
+  <!-- ruler ticks in the header -->
+  <g stroke="#64BEB9" stroke-width="2" opacity="0.7">
+    <line x1="14" y1="14" x2="14" y2="18"/>
+    <line x1="24" y1="14" x2="24" y2="18"/>
+    <line x1="34" y1="14" x2="34" y2="18"/>
+    <line x1="44" y1="14" x2="44" y2="18"/>
+  </g>
+</svg>

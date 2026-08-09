@@ -1,0 +1,54 @@
+// plasma.sequencer — cutscene / cinematic timeline tool.
+//
+// The AUTHORED manifest, kept in source next to the plugin. It declares identity, compatibility,
+// what to load and what to ship. Component hashes and sizes are NOT here: the packaging step
+// computes those and emits them into the published manifest that ships inside the .plpkg.
+//
+// Field reference and validation rules: Docs/PluginPackageManagerPlan.html §05.
+// Design plan: PlasmaEngine2/Documentation/Sequencer/Plan.html.
+
+PackageInfo
+{
+	// ---- identity -------------------------------------------------------------
+	// 0.x while the tool is under construction: P0 is the asset-type skeleton.
+	// 1.0.0 when the P1 core editor (tracks, timeline, preview playback) lands.
+	string %Id{"plasma.sequencer"}
+	string %Version{"0.1.0"}
+	string %Publisher{"PlasmaTechnology"}
+	string %License{"MIT"}
+	string %Homepage{"https://plasmagameengine.com"}
+
+	// ---- compatibility --------------------------------------------------------
+	// Must equal plSdkVersion::GetAbiTag() of the engine these binaries were built
+	// against. The build configuration is part of it - a Development and a Shipping
+	// build do not share a binary interface.
+	string %MinEngineVersion{"0.8.0"}
+	string %MaxEngineVersion{"0.8.0"}
+	string %AbiTag{"win64-msvc19-0.8.0-dev"}
+
+	// ---- presentation ---------------------------------------------------------
+	// "Tools" because the catalogue's Category vocabulary has no "Cinematics";
+	// see the plan's §10 manifest table for the reasoning.
+	string %DisplayName{"Sequencer"}
+	string %Category{"Tools"}
+	string %Description{"Multi-object cinematic timeline for building in-game cutscenes: a Sequence asset whose tracks animate transforms and component properties of many scene objects, cut between cameras, and trigger events, animation clips and audio - with editor preview and a runtime player component.
+
+Currently a work-in-progress skeleton: the Sequence asset type, an empty timeline panel and the runtime resource/player stubs. Track editing lands in the next milestone."}
+	string %Icon{"Branding/SequencerIcon.png"}
+	string %Banner{"Branding/SequencerBanner.png"}
+
+	// ---- binaries -------------------------------------------------------------
+	// Three plugins: the runtime player, the editor-engine-process side that serves
+	// the asset's viewport (a plSceneContext subclass), and the editor UI.
+	string %EditorPlugins{"plEditorPluginSequencer"}
+	string %EditorEnginePlugins{"plEnginePluginSequencer"}
+	string %RuntimePlugins{"plSequencerPlugin"}
+	string %PackageDependencies{}
+
+	// ---- components -----------------------------------------------------------
+	Component { string %Name{"manifest"} string %Platform{"any"} }
+	Component { string %Name{"runtime-win64"} string %Platform{"win64"} }
+	Component { string %Name{"editor-win64"} string %Platform{"win64"} }
+	Component { string %Name{"icon"} string %Platform{"any"} }
+	Component { string %Name{"banner"} string %Platform{"any"} }
+}

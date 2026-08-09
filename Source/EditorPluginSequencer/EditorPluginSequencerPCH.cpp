@@ -8,4 +8,9 @@ PL_STATICLINK_LIBRARY(EditorPluginSequencer)
   PL_STATICLINK_REFERENCE(EditorPluginSequencer_EditorPluginSequencer);
   PL_STATICLINK_REFERENCE(EditorPluginSequencer_SequenceAsset_SequenceAsset);
   PL_STATICLINK_REFERENCE(EditorPluginSequencer_SequenceAsset_SequenceAssetManager);
+  PL_STATICLINK_REFERENCE(EditorPluginSequencer_SequenceAsset_SequenceModel);
+  PL_STATICLINK_REFERENCE(EditorPluginSequencer_SequenceAsset_SequenceObjectAccessor);
+  PL_STATICLINK_REFERENCE(EditorPluginSequencer_SequenceAsset_SequenceThumbnailCache);
+  PL_STATICLINK_REFERENCE(EditorPluginSequencer_SequenceAsset_SequenceTrackView);
+  PL_STATICLINK_REFERENCE(EditorPluginSequencer_SequenceAsset_SequencerPanel);
 }

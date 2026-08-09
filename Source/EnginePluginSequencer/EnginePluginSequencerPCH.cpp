@@ -6,4 +6,5 @@ PL_STATICLINK_LIBRARY(EnginePluginSequencer)
     return;
 
   PL_STATICLINK_REFERENCE(EnginePluginSequencer_SequenceAsset_SequenceContext);
+  PL_STATICLINK_REFERENCE(EnginePluginSequencer_SequenceAsset_SequenceView);
 }

@@ -12,12 +12,9 @@ public class EnginePluginSequencerModule : ModuleRules
         PlasmaPackageSdk.ConfigureEditorSdkConsumer(this, context);
         PlasmaPackageSdk.AddPackagePluginImport(this, context, "Source/SequencerPlugin", "plSequencerPlugin");
 
-        // plSequenceContext derives from plSceneContext: Sequence documents are game-object context
-        // documents, and the scene context is what serves those in the engine process (it registers
-        // for "Scene;Prefab;PropertyAnim" itself). Its headers live under EditorPlugins/Scene, which
-        // is not on the default SDK include path, and its messages come from SharedPluginScene.
-        PrivateIncludePaths.Add(Path.Combine(PlasmaPackageSdk.Root, "Code", "EditorPlugins", "Scene"));
-        PlasmaPackageSdk.AddImportLibrary(this, context, "plEnginePluginScene");
-        PlasmaPackageSdk.AddImportLibrary(this, context, "plSharedPluginScene");
+        // plSequenceContext derives directly from plEngineProcessDocumentContext (like plLayerContext
+        // and water's profile context). It must NOT derive from plSceneContext: the context factory
+        // resolves "DocumentType" via FindPropertyByName, which walks the hierarchy, so a derived
+        // redefinition trips the RTTI correctness assert.
     }
 }

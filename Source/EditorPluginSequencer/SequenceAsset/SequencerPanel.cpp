@@ -8,6 +8,7 @@
 #include <ToolsFoundation/Object/DocumentObjectManager.h>
 #include <ToolsFoundation/Selection/SelectionManager.h>
 
+#include <EditorPluginSequencer/SequenceAsset/SequenceRenderDialog.moc.h>
 #include <GuiFoundation/UIServices/DynamicStringEnum.h>
 #include <GuiFoundation/Widgets/SearchableMenu.moc.h>
 
@@ -356,6 +357,27 @@ QWidget* plQtSequencerPanel::CreateTransportBar()
                                 "QToolButton:checked { background: #085242; color: #ffffff; }");
   connect(m_pPilotButton, &QToolButton::clicked, this, [this](bool bChecked) { m_pDocument->SetPilotCamera(bChecked); });
   pLayout->addWidget(m_pPilotButton);
+
+  // Render to disk. Sits next to Pilot because it renders through the same camera cuts Pilot shows.
+  {
+    QToolButton* pRender = new QToolButton(pBar);
+    pRender->setText("Render…");
+    pRender->setFixedHeight(iControlHeight);
+    pRender->setToolTip("Render this sequence to an image sequence, and optionally a video.");
+    pRender->setStyleSheet("QToolButton { background: #38383c; border-radius: 3px; padding: 2px 8px; color: #b0b0b4; }");
+    connect(pRender, &QToolButton::clicked, this, [this]() {
+      // Parentless and modal, which is how every dialog in the editor is opened - plQtCppClassDlg,
+      // plQtExtractGeometryDlg and plQtExportProjectDlg all do exactly this. Modeless-and-parentless
+      // is a combination nothing else uses, and it is what hid the Browse picker: a parentless
+      // modeless window owns nothing, so the application-modal file dialog it spawns can stack
+      // behind the main window - input blocked everywhere, and nothing visible to dismiss.
+      //
+      // exec() costs the render nothing: it runs a full nested event loop, so the engine replies
+      // that drive frame capture still arrive.
+      plQtSequenceRenderDialog dlg(m_pDocument, nullptr);
+      dlg.exec(); });
+    pLayout->addWidget(pRender);
+  }
 
   addSeparator();
 

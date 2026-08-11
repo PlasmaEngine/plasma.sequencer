@@ -10,6 +10,7 @@ class QLabel;
 class QComboBox;
 class QDoubleSpinBox;
 class plQtSearchableMenu;
+class plQtSequenceRenderDialog;
 
 /// \brief The Sequencer dock content: transport toolbar, binding outliner and the timeline canvas.
 class plQtSequencerPanel : public QWidget

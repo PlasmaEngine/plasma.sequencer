@@ -685,6 +685,29 @@ void plSequenceAssetDocument::ApplyAnimation()
   }
 
   UpdateClipPreview();
+  SendPreviewTime();
+}
+
+void plSequenceAssetDocument::SendPreviewTime()
+{
+  // A thumbnail pose - the filmstrip or a render to disk - drives the world itself, at its own
+  // fixed step. Two sources of simulation time would fight.
+  if (IsThumbnailPoseActive())
+    return;
+
+  if (GetEditorEngineConnection() == nullptr)
+    return;
+
+  const double fSeconds = (double)m_uiScrubberTickPos / (double)plSequenceTicksPerSecond;
+
+  plStringBuilder sValue;
+  sValue.SetFormat("{0}", plArgF(fSeconds, 6));
+
+  plDocumentConfigMsgToEngine msg;
+  msg.m_DocumentGuid = GetGuid();
+  msg.m_sWhatToDo = "SequencePreviewTime";
+  msg.m_sValue = sValue;
+  GetEditorEngineConnection()->SendMessage(&msg);
 }
 
 void plSequenceAssetDocument::UpdateClipPreview()

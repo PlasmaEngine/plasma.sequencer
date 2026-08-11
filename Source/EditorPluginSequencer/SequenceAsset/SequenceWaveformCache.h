@@ -42,9 +42,15 @@ public:
   /// grid does for the same values - the engine's version is file-local to its widget.
   static plString PayloadDisplayName(plStringView sPayload);
 
-private:
-  /// Resolves a trigger payload to an absolute path of a decodable audio file.
+  /// \brief Resolves a trigger payload to an absolute path of a decodable audio file. Public so the
+  /// offline audio mix (render-to-disk) resolves clips exactly the way the waveform display does.
   static plResult ResolveSampleFile(plStringView sPayload, plStringBuilder& out_sAbsolutePath, plUInt32 uiDepth = 0);
+
+  /// \brief Fully decodes a payload's sample to interleaved stereo 16-bit PCM at the given rate.
+  /// This is the offline-mix workhorse; the peaks path below stays as cheap as it was.
+  static plResult DecodePayloadPcm(plStringView sPayload, plUInt32 uiSampleRate, plDynamicArray<plInt16>& out_samples);
+
+private:
 
   static plResult Decode(plStringView sAbsolutePath, Peaks& out_peaks);
 

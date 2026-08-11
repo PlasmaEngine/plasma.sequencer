@@ -21,6 +21,12 @@ public:
   virtual void HandleMessage(const plEditorEngineDocumentMsg* pMsg) override;
 
 protected:
+  /// Freezes the world. plWorld simulates by default, so without this the preview viewport runs
+  /// particles, physics and animation on wall-clock time - they drift on with the playhead standing
+  /// still, and show a state belonging to no frame of the sequence. The playhead is the only thing
+  /// that should move time here; see AdvancePreviewTo.
+  virtual void OnInitialize() override;
+
   virtual plEngineProcessViewContext* CreateViewContext() override;
   virtual void DestroyViewContext(plEngineProcessViewContext* pContext) override;
 
@@ -29,7 +35,44 @@ protected:
   /// counter back, so a thumbnail is never captured before there is something to capture.
   virtual bool UpdateThumbnailViewContext(plEngineProcessViewContext* pThumbnailViewContext) override;
 
+  /// Steps the world exactly once per captured frame while rendering to disk. See SetRenderMode.
+  virtual void UpdateDocumentContext() override;
+
+  virtual void OnThumbnailViewContextRequested() override;
+  virtual void OnDestroyThumbnailViewContext() override;
+
 private:
+  /// \brief Turns the world's simulation on for the duration of a render to disk.
+  ///
+  /// The thumbnail path this render rides on deliberately freezes the world - a thumbnail of a
+  /// moving scene would never be reproducible - which is exactly why particles, physics and
+  /// animation were missing from exported video.
+  ///
+  /// Simply re-enabling simulation is not enough, because one captured frame takes several engine
+  /// frames to converge, and the world would advance on every one of them. Instead simulation is
+  /// enabled for exactly one engine frame per captured frame, with the world clock on a fixed
+  /// timestep of 1/fps. plWorld::Update pauses its clock whenever simulation is off, so the
+  /// remaining convergence frames advance time by precisely zero: the result is one deterministic
+  /// simulation step per output frame, independent of how fast the machine renders.
+  void SetRenderMode(bool bEnabled, float fFramesPerSecond);
+
+  /// \brief Simulates the preview world forward to \a fTargetSeconds of sequence time.
+  ///
+  /// Locks what the viewport shows to the frame being edited: without it the world is frozen, so a
+  /// particle effect sits at whatever state it was left in no matter where the playhead is.
+  ///
+  /// Scrubbing backwards restarts everything that plays and replays forwards into the new time,
+  /// since a simulation cannot run in reverse. Only the last MaxReplaySeconds are replayed, so an
+  /// effect older than that window is approximate rather than exact.
+  void AdvancePreviewTo(double fTargetSeconds);
+
+  /// \brief Puts everything that plays back to its time-zero state.
+  ///
+  /// Uses the plain Core plMsgInterruptPlaying / plMsgSetPlaying pair broadcast to every object, so
+  /// any component that plays something is covered and the sequencer needs no dependency on the
+  /// particle package.
+  void RestartEffects();
+
   // Audio preview. The editor knows where the playhead is and sends only clip edges; this process
   // owns the world and the audio system, so it is where triggers actually fire.
   plGameObject* ResolvePreviewAudioObject(plStringView sObjectGuid);
@@ -46,4 +89,25 @@ private:
   plTransform m_ThumbnailCameraTransform = plTransform::MakeIdentity();
   float m_fThumbnailCameraFov = 60.0f;
   bool m_bThumbnailCameraValid = false;
+
+  /// Render-to-disk state. m_bSteppedThisCapture is what limits the world to a single simulation
+  /// step per captured frame no matter how many engine frames the capture takes.
+  bool m_bRenderMode = false;
+  bool m_bCaptureInProgress = false;
+  bool m_bSteppedThisCapture = false;
+
+  /// Sequence time the preview world has been simulated to. See AdvancePreviewTo.
+  double m_fPreviewTimeSeconds = 0.0;
+
+  /// How much history one playhead move will replay. Replaying a whole sequence a step at a time
+  /// would stall the editor for as long as the sequence, so a jump only replays its tail.
+  static constexpr double MaxReplaySeconds = 4.0;
+
+  /// Ceiling on world updates per playhead move, so a stall cannot cascade. Derived from the replay
+  /// window rather than picked, so the two cannot drift apart.
+  static constexpr plUInt32 MaxStepsPerMove = (plUInt32)(MaxReplaySeconds * 30.0) + 1;
+
+  /// Largest single step handed to the simulation. A stable physics setup becomes an explosion when
+  /// given one enormous step after a slow editor frame.
+  static constexpr double MaxStepSeconds = 1.0 / 30.0;
 };

@@ -671,9 +671,15 @@ void plSequencePlayerComponent::CreateGameObjectBinding(const plSequenceTrackDes
   if (pTrack->m_Target < plPropertyAnimTarget::Number || pTrack->m_Target > plPropertyAnimTarget::RotationZ)
     return;
 
+  // Every rejection below drops a track the author can see in the timeline, so each one says why.
+  // Silently binding nothing is how "the camera does not move" turns into a hunt with no evidence.
   const plAbstractProperty* pAbstract = pRtti->FindPropertyByName(pTrack->m_sPropertyPath);
   if (pAbstract == nullptr || pAbstract->GetCategory() != plPropertyCategory::Member)
+  {
+    plLog::Warning("Sequence player: '{0}' has no member property '{1}', so that track does nothing.", pRtti->GetTypeName(),
+      pTrack->m_sPropertyPath);
     return;
+  }
 
   auto pMember = static_cast<const plAbstractMemberProperty*>(pAbstract);
   const plRTTI* pPropRtti = pMember->GetSpecificType();
@@ -681,17 +687,29 @@ void plSequencePlayerComponent::CreateGameObjectBinding(const plSequenceTrackDes
   if (pTrack->m_Target == plPropertyAnimTarget::Number)
   {
     if (pPropRtti != plGetStaticRTTI<float>() && pPropRtti != plGetStaticRTTI<bool>())
+    {
+      plLog::Warning("Sequence player: '{0}' is a {1}, which a number track cannot drive.", pTrack->m_sPropertyPath,
+        pPropRtti->GetTypeName());
       return;
+    }
   }
   else if (pTrack->m_Target >= plPropertyAnimTarget::RotationX && pTrack->m_Target <= plPropertyAnimTarget::RotationZ)
   {
     if (pPropRtti != plGetStaticRTTI<plQuat>())
+    {
+      plLog::Warning("Sequence player: rotation track targets '{0}', which is a {1} rather than a quaternion.",
+        pTrack->m_sPropertyPath, pPropRtti->GetTypeName());
       return;
+    }
   }
   else
   {
     if (pPropRtti != plGetStaticRTTI<plVec2>() && pPropRtti != plGetStaticRTTI<plVec3>() && pPropRtti != plGetStaticRTTI<plVec4>())
+    {
+      plLog::Warning("Sequence player: vector track targets '{0}', which is a {1} rather than a vector.", pTrack->m_sPropertyPath,
+        pPropRtti->GetTypeName());
       return;
+    }
   }
 
   GameObjectBinding* pBinding = nullptr;

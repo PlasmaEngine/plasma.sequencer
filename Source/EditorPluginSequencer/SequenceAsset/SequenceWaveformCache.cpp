@@ -117,6 +117,40 @@ plResult plSequenceWaveformCache::ResolveSampleFile(plStringView sPayload, plStr
   return PL_FAILURE;
 }
 
+plResult plSequenceWaveformCache::DecodePayloadPcm(plStringView sPayload, plUInt32 uiSampleRate, plDynamicArray<plInt16>& out_samples)
+{
+  out_samples.Clear();
+
+  plStringBuilder sFile;
+  if (ResolveSampleFile(sPayload, sFile).Failed())
+    return PL_FAILURE;
+
+  // Stereo s16 at the mix rate: the decoder does the resampling and channel spread, so every clip
+  // arrives in the one format the mix sums in.
+  ma_decoder_config config = ma_decoder_config_init(ma_format_s16, 2, uiSampleRate);
+
+  ma_decoder decoder;
+  if (ma_decoder_init_file(sFile.GetData(), &config, &decoder) != MA_SUCCESS)
+    return PL_FAILURE;
+
+  plInt16 chunk[4096 * 2];
+
+  for (;;)
+  {
+    ma_uint64 uiRead = 0;
+    if (ma_decoder_read_pcm_frames(&decoder, chunk, 4096, &uiRead) != MA_SUCCESS || uiRead == 0)
+      break;
+
+    const plUInt32 uiValues = (plUInt32)uiRead * 2;
+    const plUInt32 uiOld = out_samples.GetCount();
+    out_samples.SetCountUninitialized(uiOld + uiValues);
+    plMemoryUtils::Copy(out_samples.GetData() + uiOld, chunk, uiValues);
+  }
+
+  ma_decoder_uninit(&decoder);
+  return out_samples.IsEmpty() ? PL_FAILURE : PL_SUCCESS;
+}
+
 plResult plSequenceWaveformCache::Decode(plStringView sAbsolutePath, Peaks& out_peaks)
 {
   plStringBuilder sPath = sAbsolutePath;

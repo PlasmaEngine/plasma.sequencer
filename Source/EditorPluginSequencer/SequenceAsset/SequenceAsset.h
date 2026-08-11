@@ -237,6 +237,12 @@ public:
   /// is visible in the viewport; keep the window short and always pair the two calls.
   ///@{
   void BeginThumbnailPose(plUInt64 uiTick);
+
+  /// \brief Stops the camera-cut filmstrip rendering. The engine serves one offscreen render at a
+  /// time, so anything else driving that channel - a disk render - must take exclusive use of it,
+  /// or the two interleave requests and each receives the other's frames.
+  void SetThumbnailRenderingSuspended(bool bSuspended) { m_bThumbnailRenderingSuspended = bSuspended; }
+  bool IsThumbnailRenderingSuspended() const { return m_bThumbnailRenderingSuspended; }
   void EndThumbnailPose();
   bool IsThumbnailPoseActive() const { return m_uiPoseOverrideTick != plMath::MaxValue<plUInt64>(); }
   ///@}
@@ -462,6 +468,13 @@ private:
   void ApplyAnimation();
   void ApplyAnimation(const plPropertyReference& key, const PropertyValue& value);
 
+  /// \brief Tells the engine process which sequence time the preview should be simulated to.
+  ///
+  /// Without this the preview world is frozen, so particles and other runtime effects sit at
+  /// whatever state they were left in while the playhead moves past them. The engine advances the
+  /// world by the playhead's delta, which locks what the viewport shows to the frame being edited.
+  void SendPreviewTime();
+
   plHashTable<plPropertyReference, PropertyValue, PropertyKeyHash> m_PropertyTable;
   plHashTable<plUuid, plHybridArray<plPropertyReference, 1>> m_TrackTable;
 
@@ -477,6 +490,7 @@ private:
   bool m_bPlayAnimation = false;
   bool m_bRepeatAnimation = false;
   bool m_bAutoKey = true;
+  bool m_bThumbnailRenderingSuspended = false;
 
   /// Audio clips currently sounding in the engine process, mapped to the object they were started
   /// on. The playhead crossing a clip's edge is what starts and stops it rather than every frame

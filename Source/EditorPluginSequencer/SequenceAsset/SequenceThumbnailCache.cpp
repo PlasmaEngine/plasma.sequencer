@@ -96,6 +96,11 @@ QImage plQtSequenceThumbnailCache::GetThumbnail(plInt64 iTick)
 
 void plQtSequenceThumbnailCache::ProcessNextRequest()
 {
+  // A disk render has taken the engine's one offscreen-render slot. Stand down entirely rather than
+  // racing it - both would receive each other's frames.
+  if (m_pDocument->IsThumbnailRenderingSuspended())
+    return;
+
   // Something happened since the last render finished, so the queue waits for the timer rather than
   // chaining straight on. Without this, draining the queue would resume mid-edit.
   if (m_pIdleTimer != nullptr && m_pIdleTimer->isActive())
@@ -176,6 +181,7 @@ void plQtSequenceThumbnailCache::ProcessNextRequest()
 
 void plQtSequenceThumbnailCache::ThumbnailArrivedHandler(const plCreateThumbnailMsgToEditor& msg)
 {
+  // Nothing of ours is outstanding, so this frame belongs to whoever else asked - a disk render.
   if (m_iInFlight < 0)
     return;
 

@@ -5,8 +5,8 @@ PluginInfo
 {
 	string %DisplayName{"Sequencer"}
 	string %Category{"Animation"}
-	string %MinEngineVersion{"0.11.2"}
-	string %MaxEngineVersion{"0.11.2"}
+	string %MinEngineVersion{"0.12.0"}
+	string %MaxEngineVersion{"0.12.0"}
 	string %Icon{"SequencerIcon.png"}
 	string %Banner{"SequencerBanner.png"}
 	string %Description{"Cinematic timeline tool: Sequence assets that animate many scene objects, cut between cameras and fire events, plus the runtime player component."}

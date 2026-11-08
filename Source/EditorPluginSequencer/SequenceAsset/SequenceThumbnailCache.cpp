@@ -1,31 +1,49 @@
 #include <EditorPluginSequencer/EditorPluginSequencerPCH.h>
 
 #include <EditorEngineProcessFramework/EngineProcess/EngineProcessMessages.h>
-#include <EditorPluginSequencer/SequenceAsset/SequenceThumbnailCache.moc.h>
+#include <EditorPluginSequencer/SequenceAsset/SequenceThumbnailCache.h>
 
-plQtSequenceThumbnailCache::plQtSequenceThumbnailCache(plSequenceAssetDocument* pDocument, QObject* pParent)
-  : QObject(pParent)
-  , m_pDocument(pDocument)
+plUInt32 plSequenceThumbnailCache::s_uiNextSerial = 1;
+
+plSequenceThumbnailCache::plSequenceThumbnailCache(plSequenceAssetDocument* pDocument)
+  : m_pDocument(pDocument)
 {
   // Document-scoped engine messages are routed to the document, not broadcast on the connection's
   // general event, so this listens to the document.
-  m_pDocument->m_ThumbnailArrived.AddEventHandler(plMakeDelegate(&plQtSequenceThumbnailCache::ThumbnailArrivedHandler, this));
-  m_pDocument->m_SequenceEvents.AddEventHandler(plMakeDelegate(&plQtSequenceThumbnailCache::DocumentEventHandler, this));
-  m_pDocument->GetCommandHistory()->m_Events.AddEventHandler(plMakeDelegate(&plQtSequenceThumbnailCache::CommandHistoryEventHandler, this));
-
-  m_pIdleTimer = new QTimer(this);
-  m_pIdleTimer->setSingleShot(true);
-  connect(m_pIdleTimer, &QTimer::timeout, this, [this]() { ProcessNextRequest(); });
+  m_pDocument->m_ThumbnailArrived.AddEventHandler(plMakeDelegate(&plSequenceThumbnailCache::ThumbnailArrivedHandler, this));
+  m_pDocument->m_SequenceEvents.AddEventHandler(plMakeDelegate(&plSequenceThumbnailCache::DocumentEventHandler, this));
+  m_pDocument->GetCommandHistory()->m_Events.AddEventHandler(plMakeDelegate(&plSequenceThumbnailCache::CommandHistoryEventHandler, this));
 }
 
-plQtSequenceThumbnailCache::~plQtSequenceThumbnailCache()
+plSequenceThumbnailCache::~plSequenceThumbnailCache()
 {
-  m_pDocument->GetCommandHistory()->m_Events.RemoveEventHandler(plMakeDelegate(&plQtSequenceThumbnailCache::CommandHistoryEventHandler, this));
-  m_pDocument->m_SequenceEvents.RemoveEventHandler(plMakeDelegate(&plQtSequenceThumbnailCache::DocumentEventHandler, this));
-  m_pDocument->m_ThumbnailArrived.RemoveEventHandler(plMakeDelegate(&plQtSequenceThumbnailCache::ThumbnailArrivedHandler, this));
+  m_Timers.StopAll();
+
+  m_pDocument->GetCommandHistory()->m_Events.RemoveEventHandler(plMakeDelegate(&plSequenceThumbnailCache::CommandHistoryEventHandler, this));
+  m_pDocument->m_SequenceEvents.RemoveEventHandler(plMakeDelegate(&plSequenceThumbnailCache::DocumentEventHandler, this));
+  m_pDocument->m_ThumbnailArrived.RemoveEventHandler(plMakeDelegate(&plSequenceThumbnailCache::ThumbnailArrivedHandler, this));
 }
 
-void plQtSequenceThumbnailCache::CommandHistoryEventHandler(const plCommandHistoryEvent& e)
+void plSequenceThumbnailCache::ReportReady()
+{
+  if (m_OnThumbnailReady.IsValid())
+    m_OnThumbnailReady();
+}
+
+void plSequenceThumbnailCache::StartIdleTimer()
+{
+  m_Timers.Restart(m_uiIdleTimer, plTime::MakeFromMilliseconds(IdleDelayMs), [this]()
+    {
+    m_uiIdleTimer = 0;
+    ProcessNextRequest(); });
+}
+
+bool plSequenceThumbnailCache::IsIdleTimerActive() const
+{
+  return m_uiIdleTimer != 0 && m_Timers.IsActive(m_uiIdleTimer);
+}
+
+void plSequenceThumbnailCache::CommandHistoryEventHandler(const plCommandHistoryEvent& e)
 {
   PL_IGNORE_UNUSED(e);
 
@@ -34,7 +52,7 @@ void plQtSequenceThumbnailCache::CommandHistoryEventHandler(const plCommandHisto
   DeferRendering();
 }
 
-void plQtSequenceThumbnailCache::DeferRendering()
+void plSequenceThumbnailCache::DeferRendering()
 {
   // Abandon whatever is rendering: its pose is holding the scene at some other tick, and the reply
   // would be a picture of a scene that has since been edited anyway. Dropped rather than cached,
@@ -45,18 +63,17 @@ void plQtSequenceThumbnailCache::DeferRendering()
     m_iInFlight = -1;
   }
 
-  if (m_pIdleTimer != nullptr)
-    m_pIdleTimer->start(IdleDelayMs);
+  StartIdleTimer();
 }
 
-void plQtSequenceThumbnailCache::DocumentEventHandler(const plSequenceAssetEvent& e)
+void plSequenceThumbnailCache::DocumentEventHandler(const plSequenceAssetEvent& e)
 {
   // A cached image is a picture of the scene as it was when it was rendered. Re-cloning the
   // context replaces every object it was a picture of, so everything cached is now stale.
   if (e.m_Type == plSequenceAssetEvent::Type::ContextChanged)
   {
     InvalidateAll();
-    Q_EMIT ThumbnailReady(); // repaint, which re-requests what is on screen
+    ReportReady(); // repaint, which re-requests what is on screen
     return;
   }
 
@@ -68,17 +85,17 @@ void plQtSequenceThumbnailCache::DocumentEventHandler(const plSequenceAssetEvent
   }
 }
 
-void plQtSequenceThumbnailCache::InvalidateAll()
+void plSequenceThumbnailCache::InvalidateAll()
 {
   m_Cache.Clear();
   m_Pending.Clear();
   DeferRendering(); // an in-flight render is of a scene that no longer exists
 }
 
-QImage plQtSequenceThumbnailCache::GetThumbnail(plInt64 iTick)
+const plSequenceThumbnailCache::Thumbnail* plSequenceThumbnailCache::GetThumbnail(plInt64 iTick)
 {
-  if (const QImage* pImage = m_Cache.GetValue(iTick))
-    return *pImage;
+  if (const Thumbnail* pThumbnail = m_Cache.GetValue(iTick))
+    return pThumbnail->m_Pixels.IsEmpty() ? nullptr : pThumbnail;
 
   // not rendered yet - queue it, unless it is already queued or being rendered right now
   if (iTick != m_iInFlight && !m_Pending.Contains(iTick) && m_Pending.GetCount() < MaxPendingRequests)
@@ -87,14 +104,21 @@ QImage plQtSequenceThumbnailCache::GetThumbnail(plInt64 iTick)
 
     // Queued, not started. Rendering waits for the idle timer, so a lane being repainted every
     // frame during a drag simply accumulates what it wants and gets it once the drag ends.
-    if (m_pIdleTimer != nullptr && !m_pIdleTimer->isActive() && m_iInFlight < 0)
-      m_pIdleTimer->start(IdleDelayMs);
+    if (!IsIdleTimerActive() && m_iInFlight < 0)
+      StartIdleTimer();
   }
 
-  return QImage();
+  return nullptr;
 }
 
-void plQtSequenceThumbnailCache::ProcessNextRequest()
+void plSequenceThumbnailCache::CacheFailure(plInt64 iTick)
+{
+  Thumbnail& failed = m_Cache[iTick];
+  failed.m_Pixels.Clear();
+  failed.m_uiSerial = s_uiNextSerial++;
+}
+
+void plSequenceThumbnailCache::ProcessNextRequest()
 {
   // A disk render has taken the engine's one offscreen-render slot. Stand down entirely rather than
   // racing it - both would receive each other's frames.
@@ -103,7 +127,7 @@ void plQtSequenceThumbnailCache::ProcessNextRequest()
 
   // Something happened since the last render finished, so the queue waits for the timer rather than
   // chaining straight on. Without this, draining the queue would resume mid-edit.
-  if (m_pIdleTimer != nullptr && m_pIdleTimer->isActive())
+  if (IsIdleTimerActive())
     return;
 
   // The engine renders one thumbnail at a time and asserts if asked for a second, so this waits.
@@ -129,7 +153,7 @@ void plQtSequenceThumbnailCache::ProcessNextRequest()
 
     if (!m_pDocument->FindCameraCutAtTick(iTick).IsValid())
     {
-      m_Cache.Insert(iTick, QImage()); // remember the failure, so it is not retried every repaint
+      CacheFailure(iTick);
       ProcessNextRequest();
       return;
     }
@@ -153,7 +177,7 @@ void plQtSequenceThumbnailCache::ProcessNextRequest()
     {
       m_pDocument->EndThumbnailPose();
       m_iInFlight = -1;
-      m_Cache.Insert(iTick, QImage());
+      CacheFailure(iTick);
       ProcessNextRequest();
       return;
     }
@@ -179,7 +203,7 @@ void plQtSequenceThumbnailCache::ProcessNextRequest()
   }
 }
 
-void plQtSequenceThumbnailCache::ThumbnailArrivedHandler(const plCreateThumbnailMsgToEditor& msg)
+void plSequenceThumbnailCache::ThumbnailArrivedHandler(const plCreateThumbnailMsgToEditor& msg)
 {
   // Nothing of ours is outstanding, so this frame belongs to whoever else asked - a disk render.
   if (m_iInFlight < 0)
@@ -191,21 +215,24 @@ void plQtSequenceThumbnailCache::ThumbnailArrivedHandler(const plCreateThumbnail
   // the image is captured, so the scene can go back to the playhead
   m_pDocument->EndThumbnailPose();
 
-  const plUInt32 uiExpected = (plUInt32)ThumbnailWidth * ThumbnailHeight * 4;
+  const plUInt32 uiPixels = (plUInt32)ThumbnailWidth * ThumbnailHeight;
+  const plUInt32 uiExpected = uiPixels * 4;
 
   plLog::Info("Sequence thumbnail: received {0} bytes, expected {1}", msg.m_ThumbnailData.GetCount(), uiExpected);
 
   if (msg.m_ThumbnailData.GetCount() == uiExpected)
   {
     // the buffer is raw RGBA and outlives this call only as long as the message does, so copy it
-    QImage image(msg.m_ThumbnailData.GetData(), ThumbnailWidth, ThumbnailHeight, QImage::Format_RGBA8888);
-    m_Cache.Insert(iTick, image.copy());
+    Thumbnail& thumbnail = m_Cache[iTick];
+    thumbnail.m_Pixels.SetCountUninitialized(uiPixels);
+    plMemoryUtils::Copy(reinterpret_cast<plUInt8*>(thumbnail.m_Pixels.GetData()), msg.m_ThumbnailData.GetData(), uiExpected);
+    thumbnail.m_uiSerial = s_uiNextSerial++;
 
-    Q_EMIT ThumbnailReady();
+    ReportReady();
   }
   else
   {
-    m_Cache.Insert(iTick, QImage());
+    CacheFailure(iTick);
   }
 
   ProcessNextRequest();

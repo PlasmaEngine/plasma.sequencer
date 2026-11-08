@@ -2,9 +2,7 @@
 
 #include <EditorPluginSequencer/SequenceAsset/SequenceAsset.h>
 #include <EditorPluginSequencer/SequenceAsset/SequenceAssetManager.h>
-#include <EditorPluginSequencer/SequenceAsset/SequenceAssetWindow.moc.h>
-
-#include <GuiFoundation/UIServices/ImageCache.moc.h>
+#include <EditorPluginSequencer/SequenceAsset/SequenceAssetWindow.h>
 
 PL_BEGIN_DYNAMIC_REFLECTED_TYPE(plSequenceAssetDocumentManager, 1, plRTTIDefaultAllocator<plSequenceAssetDocumentManager>)
 PL_END_DYNAMIC_REFLECTED_TYPE;
@@ -22,8 +20,6 @@ plSequenceAssetDocumentManager::plSequenceAssetDocumentManager()
   m_DocTypeDesc.m_CompatibleTypes.PushBack("CompatibleAsset_Sequence");
   m_DocTypeDesc.m_sResourceFileExtension = "plBinSequence";
   m_DocTypeDesc.m_AssetDocumentFlags = plAssetDocumentFlags::AutoTransformOnSave;
-
-  plQtImageCache::GetSingleton()->RegisterTypeImage("Sequence", QPixmap(":/AssetIcons/Sequence.svg"));
 }
 
 plSequenceAssetDocumentManager::~plSequenceAssetDocumentManager()
@@ -36,7 +32,7 @@ void plSequenceAssetDocumentManager::OnDocumentManagerEvent(const plDocumentMana
   if (e.m_Type == plDocumentManager::Event::Type::DocumentWindowRequested &&
       e.m_pDocument->GetDynamicRTTI() == plGetStaticRTTI<plSequenceAssetDocument>())
   {
-    new plQtSequenceAssetDocumentWindow(static_cast<plSequenceAssetDocument*>(e.m_pDocument)); // NOLINT: owned by Qt
+    new plSequenceAssetDocumentWindow(static_cast<plSequenceAssetDocument*>(e.m_pDocument)); // NOLINT: deletes itself when the document closes
   }
 }
 

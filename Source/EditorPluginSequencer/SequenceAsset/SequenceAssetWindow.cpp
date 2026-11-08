@@ -1,199 +1,121 @@
 #include <EditorPluginSequencer/EditorPluginSequencerPCH.h>
 
-#include <EditorFramework/Assets/AssetStatusIndicator.moc.h>
-#include <EditorFramework/DocumentWindow/GameObjectViewWidget.moc.h>
-#include <EditorFramework/DocumentWindow/QuadViewWidget.moc.h>
+#include <EditorFramework/DocumentWindow/EngineQuadView.h>
+#include <EditorFramework/DocumentWindow/GameObjectViewWidget.h>
 #include <EditorFramework/InputContexts/EditorInputContext.h>
-#include <EditorFramework/Panels/GameObjectPanel/GameObjectModel.moc.h>
-#include <EditorFramework/Panels/GameObjectPanel/GameObjectPanel.moc.h>
+#include <EditorFramework/Panels/GameObjectPanel/GameObjectPanel.h>
 #include <EditorFramework/Preferences/EditorPreferences.h>
 #include <EditorPluginSequencer/SequenceAsset/SequenceAsset.h>
-#include <EditorPluginSequencer/SequenceAsset/SequenceAssetWindow.moc.h>
-#include <EditorPluginSequencer/SequenceAsset/SequencerPanel.moc.h>
-#include <GuiFoundation/ActionViews/MenuBarActionMapView.moc.h>
-#include <GuiFoundation/ActionViews/ToolBarActionMapView.moc.h>
-#include <GuiFoundation/DockPanels/DocumentPanel.moc.h>
-#include <GuiFoundation/PropertyGrid/PropertyGridWidget.moc.h>
-#include <GuiFoundation/Widgets/Curve1DEditorWidget.moc.h>
-#include <GuiFoundation/Widgets/EventTrackEditorWidget.moc.h>
+#include <EditorPluginSequencer/SequenceAsset/SequenceAssetWindow.h>
+#include <EditorPluginSequencer/SequenceAsset/SequencerPanel.h>
+#include <GuiFoundation/EngineUi/EngineEventTrackEditor.h>
 #include <ToolsFoundation/Command/TreeCommands.h>
 
-#include <QLabel>
-#include <QVBoxLayout>
-
-plQtSequenceAssetDocumentWindow::plQtSequenceAssetDocumentWindow(plSequenceAssetDocument* pDocument)
-  : plQtGameObjectDocumentWindow(pDocument)
+plSequenceAssetDocumentWindow::plSequenceAssetDocumentWindow(plSequenceAssetDocument* pDocument)
+  : plGameObjectDocumentWindow(pDocument)
 {
-  auto ViewFactory = [](plQtEngineDocumentWindow* pWindow, plEngineViewConfig* pConfig) -> plQtEngineViewWidget*
+  // 3D viewport of the attached context scene
+  auto ViewFactory = [](plEngineDocumentWindow* pWindow, plEngineViewConfig* pConfig) -> plEngineViewWidget*
   {
-    plQtGameObjectViewWidget* pWidget = new plQtGameObjectViewWidget(nullptr, static_cast<plQtSequenceAssetDocumentWindow*>(pWindow), pConfig);
+    plGameObjectViewWidget* pWidget = new plGameObjectViewWidget(static_cast<plSequenceAssetDocumentWindow*>(pWindow), pConfig);
     pWindow->AddViewWidget(pWidget);
     return pWidget;
   };
-  m_pQuadViewWidget = new plQtQuadViewWidget(pDocument, this, ViewFactory, "SequenceAssetViewToolBar");
+  SetQuadView(PL_DEFAULT_NEW(plEngineQuadView, pDocument, this, ViewFactory, "SequenceAssetViewToolBar"));
 
   pDocument->SetEditToolConfigDelegate(
     [this](plGameObjectEditTool* pTool) { pTool->ConfigureTool(static_cast<plGameObjectDocument*>(GetDocument()), this, this); });
 
-  // 3D viewport of the attached context scene
-  {
-    plQtDocumentPanel* pViewPanel = new plQtDocumentPanel(this, pDocument);
-    pViewPanel->setObjectName("plQtDocumentPanel");
-    pViewPanel->setWindowTitle("3D View");
-    pViewPanel->setWidget(m_pQuadViewWidget);
-    m_pDockManager->setCentralWidget(pViewPanel);
-  }
-
   plEditorPreferencesUser* pPreferences = plPreferences::QueryPreferences<plEditorPreferencesUser>();
   SetTargetFramerate(pPreferences->GetMaxFramerate());
 
-  // Menu Bar
-  {
-    plQtMenuBarActionMapView* pMenuBar = static_cast<plQtMenuBarActionMapView*>(menuBar());
-    plActionContext context;
-    context.m_sMapping = "SequenceAssetMenuBar";
-    context.m_pDocument = pDocument;
-    context.m_pWindow = this;
-    pMenuBar->SetActionContext(context);
-  }
+  SetMenuBarActions("SequenceAssetMenuBar");
+  SetToolBarActions("SequenceAssetToolBar");
 
-  // Tool Bar
-  {
-    plQtToolBarActionMapView* pToolBar = new plQtToolBarActionMapView("Toolbar", this);
-    plActionContext context;
-    context.m_sMapping = "SequenceAssetToolBar";
-    context.m_pDocument = pDocument;
-    context.m_pWindow = this;
-    pToolBar->SetActionContext(context);
-    pToolBar->setObjectName("SequenceAssetWindowToolBar");
-    addToolBar(pToolBar);
-  }
+  CreatePanels(pDocument);
 
-  // Scenegraph of the context document
-  {
-    std::unique_ptr<plQtDocumentTreeModel> pModel(new plQtGameObjectModel(pDocument->GetObjectManager()));
-    pModel->AddAdapter(new plQtDummyAdapter(pDocument->GetObjectManager(), plGetStaticRTTI<plDocumentRoot>(), "TempObjects"));
-    pModel->AddAdapter(new plQtGameObjectAdapter(pDocument->GetObjectManager()));
-
-    plQtDocumentPanel* pGameObjectPanel = new plQtGameObjectPanel(this, pDocument, "SequenceAsset_ScenegraphContextMenu", std::move(pModel));
-    m_pDockManager->addDockWidget(ads::LeftDockWidgetArea, pGameObjectPanel);
-  }
-
-  // Property Grid
-  {
-    plQtDocumentPanel* pPanel = new plQtDocumentPanel(this, pDocument);
-    pPanel->setObjectName("SequenceAssetPropertiesDockWidget");
-    pPanel->setWindowTitle("Properties");
-    pPanel->show();
-
-    plQtPropertyGridWidget* pPropertyGrid = new plQtPropertyGridWidget(pPanel, pDocument);
-    QWidget* pWidget = new QWidget();
-    pWidget->setObjectName("Group");
-    pWidget->setLayout(new QVBoxLayout());
-    pWidget->setContentsMargins(0, 0, 0, 0);
-    pWidget->layout()->setContentsMargins(0, 0, 0, 0);
-    pWidget->layout()->addWidget(new plQtAssetStatusIndicator(GetDocument()));
-    pWidget->layout()->addWidget(pPropertyGrid);
-
-    pPanel->setWidget(pWidget, ads::CDockWidget::ForceNoScrollArea);
-
-    m_pDockManager->addDockWidget(ads::RightDockWidgetArea, pPanel);
-  }
-
-  // Sequencer panel: transport + binding outliner + timeline canvas
-  {
-    plQtDocumentPanel* pPanel = new plQtDocumentPanel(this, pDocument);
-    pPanel->setObjectName("SequenceAssetSequencerDockWidget");
-    pPanel->setWindowTitle("Sequencer");
-    pPanel->show();
-
-    m_pSequencerPanel = new plQtSequencerPanel(pDocument, pPanel);
-    pPanel->setWidget(m_pSequencerPanel, ads::CDockWidget::ForceNoScrollArea);
-
-    m_pDockManager->addDockWidget(ads::BottomDockWidgetArea, pPanel);
-  }
-
-  // Curve editor dock: values and tangents of the selected track (the canvas edits timing only)
-  {
-    plQtDocumentPanel* pPanel = new plQtDocumentPanel(this, pDocument);
-    pPanel->setObjectName("SequenceAssetCurveDockWidget");
-    pPanel->setWindowTitle("Curve Editor");
-    pPanel->show();
-
-    m_pCurveEditor = new plQtCurve1DEditorWidget(pPanel);
-    pPanel->setWidget(m_pCurveEditor, ads::CDockWidget::ForceNoScrollArea);
-
-    m_pDockManager->addDockWidget(ads::BottomDockWidgetArea, pPanel);
-
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::InsertCpEvent, this, &plQtSequenceAssetDocumentWindow::onCurveInsertCpAt);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::CpMovedEvent, this, &plQtSequenceAssetDocumentWindow::onCurveCpMoved);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::CpDeletedEvent, this, &plQtSequenceAssetDocumentWindow::onCurveCpDeleted);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::TangentMovedEvent, this, &plQtSequenceAssetDocumentWindow::onCurveTangentMoved);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::TangentLinkEvent, this, &plQtSequenceAssetDocumentWindow::onLinkCurveTangents);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::CpTangentModeEvent, this, &plQtSequenceAssetDocumentWindow::onCurveTangentModeChanged);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::BeginOperationEvent, this, &plQtSequenceAssetDocumentWindow::onCurveBeginOperation);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::EndOperationEvent, this, &plQtSequenceAssetDocumentWindow::onCurveEndOperation);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::BeginCpChangesEvent, this, &plQtSequenceAssetDocumentWindow::onCurveBeginCpChanges);
-    connect(m_pCurveEditor, &plQtCurve1DEditorWidget::EndCpChangesEvent, this, &plQtSequenceAssetDocumentWindow::onCurveEndCpChanges);
-  }
-
-  // Event track dock: sequence-level, so unlike the curve dock it needs no selection to be useful
-  {
-    plQtDocumentPanel* pPanel = new plQtDocumentPanel(this, pDocument);
-    pPanel->setObjectName("SequenceAssetEventDockWidget");
-    pPanel->setWindowTitle("Events");
-    pPanel->show();
-
-    m_pEventTrackEditor = new plQtEventTrackEditorWidget(pPanel);
-    pPanel->setWidget(m_pEventTrackEditor, ads::CDockWidget::ForceNoScrollArea);
-
-    m_pDockManager->addDockWidgetTab(ads::BottomDockWidgetArea, pPanel);
-
-    connect(m_pEventTrackEditor, &plQtEventTrackEditorWidget::InsertCpEvent, this, &plQtSequenceAssetDocumentWindow::onEventTrackInsertCpAt);
-    connect(m_pEventTrackEditor, &plQtEventTrackEditorWidget::CpMovedEvent, this, &plQtSequenceAssetDocumentWindow::onEventTrackCpMoved);
-    connect(m_pEventTrackEditor, &plQtEventTrackEditorWidget::CpDeletedEvent, this, &plQtSequenceAssetDocumentWindow::onEventTrackCpDeleted);
-    connect(m_pEventTrackEditor, &plQtEventTrackEditorWidget::BeginCpChangesEvent, this, &plQtSequenceAssetDocumentWindow::onEventTrackBeginCpChanges);
-    connect(m_pEventTrackEditor, &plQtEventTrackEditorWidget::EndCpChangesEvent, this, &plQtSequenceAssetDocumentWindow::onEventTrackEndCpChanges);
-    connect(m_pEventTrackEditor, &plQtEventTrackEditorWidget::BeginOperationEvent, this, &plQtSequenceAssetDocumentWindow::onEventTrackBeginOperation);
-    connect(m_pEventTrackEditor, &plQtEventTrackEditorWidget::EndOperationEvent, this, &plQtSequenceAssetDocumentWindow::onEventTrackEndOperation);
-  }
-
-  connect(m_pSequencerPanel, &plQtSequencerPanel::TrackSelectionChanged, this, &plQtSequenceAssetDocumentWindow::onTrackSelectionChanged);
-  connect(m_pSequencerPanel, &plQtSequencerPanel::KeyPicked, this, &plQtSequenceAssetDocumentWindow::onKeyPicked);
-
-  pDocument->m_SequenceEvents.AddEventHandler(plMakeDelegate(&plQtSequenceAssetDocumentWindow::SequenceEventHandler, this));
-  pDocument->GetCommandHistory()->m_Events.AddEventHandler(plMakeDelegate(&plQtSequenceAssetDocumentWindow::CommandHistoryEventHandler, this));
+  pDocument->m_SequenceEvents.AddEventHandler(plMakeDelegate(&plSequenceAssetDocumentWindow::SequenceEventHandler, this));
+  pDocument->GetCommandHistory()->m_Events.AddEventHandler(plMakeDelegate(&plSequenceAssetDocumentWindow::CommandHistoryEventHandler, this));
 
   m_CurvesToDisplay.m_bOwnsData = false;
   UpdateCurveEditor();
   UpdateEventTrackEditor();
-
-  FinishWindowCreation();
 }
 
-plQtSequenceAssetDocumentWindow::~plQtSequenceAssetDocumentWindow()
+plSequenceAssetDocumentWindow::~plSequenceAssetDocumentWindow()
 {
+  // the panels report to this window
+  DestroyPanels();
+
   plSequenceAssetDocument* pDoc = static_cast<plSequenceAssetDocument*>(GetDocument());
-  pDoc->m_SequenceEvents.RemoveEventHandler(plMakeDelegate(&plQtSequenceAssetDocumentWindow::SequenceEventHandler, this));
-  pDoc->GetCommandHistory()->m_Events.RemoveEventHandler(plMakeDelegate(&plQtSequenceAssetDocumentWindow::CommandHistoryEventHandler, this));
+  pDoc->m_SequenceEvents.RemoveEventHandler(plMakeDelegate(&plSequenceAssetDocumentWindow::SequenceEventHandler, this));
+  pDoc->GetCommandHistory()->m_Events.RemoveEventHandler(plMakeDelegate(&plSequenceAssetDocumentWindow::CommandHistoryEventHandler, this));
 }
 
-plObjectAccessorBase* plQtSequenceAssetDocumentWindow::GetObjectAccessor()
+void plSequenceAssetDocumentWindow::CreatePanels(plSequenceAssetDocument* pDocument)
+{
+  // Scenegraph of the context document: its objects live under the document root's "TempObjects"
+  {
+    plEditorUiGameObjectTree* pTree = AddPanel<plEditorUiGameObjectTree>({"SceneTree", "Scene Tree", plEditorUiDockRole::Left}, pDocument, "SequenceAsset_ScenegraphContextMenu", nullptr, nullptr, nullptr, nullptr, "TempObjects");
+    pTree->SetContextWindow(this);
+  }
+
+  // Sequencer panel: transport and the track view (its head column is the binding outliner). The Sequencer, Curve
+  // Editor and Events panels share the area below the view as tabs.
+  {
+    m_pSequencerPanel = AddPanel<plSequencerPanel>({"Sequencer", "Sequencer", plEditorUiDockRole::Bottom}, pDocument);
+    m_pSequencerPanel->m_OnTrackSelectionChanged = [this]()
+    { OnTrackSelectionChanged(); };
+    m_pSequencerPanel->m_OnKeyPicked = [this](const plUuid& trackGuid, const plUuid& cpGuid)
+    { OnKeyPicked(trackGuid, cpGuid); };
+  }
+
+  // Curve editor: values and tangents of the selected track (the canvas edits timing only)
+  {
+    plEditorUiCurveEdits& curveEdits = *this;
+    m_pCurveEditor = AddPanel<plEditorUiCurveView>({"Curves", "Curve Editor", plEditorUiDockRole::Bottom}, curveEdits);
+  }
+
+  // Event track: sequence-level, so unlike the curve editor it needs no selection to be useful
+  m_pEventTrackEditor = AddPanel<plEditorUiEventTrackView>({"Events", "Events", plEditorUiDockRole::Bottom});
+  ConnectEventTrackEditor();
+}
+
+void plSequenceAssetDocumentWindow::ConnectEventTrackEditor()
+{
+  m_pEventTrackEditor->m_OnInsertCp = [this](plInt64 iTick, plStringView sValue)
+  { OnEventTrackInsertCpAt(iTick, sValue); };
+  m_pEventTrackEditor->m_OnCpMoved = [this](plUInt32 uiIndex, plInt64 iTick)
+  { OnEventTrackCpMoved(uiIndex, iTick); };
+  m_pEventTrackEditor->m_OnCpDeleted = [this](plUInt32 uiIndex)
+  { OnEventTrackCpDeleted(uiIndex); };
+  m_pEventTrackEditor->m_OnBeginCpChanges = [this](plStringView sName)
+  { OnEventTrackBeginCpChanges(sName); };
+  m_pEventTrackEditor->m_OnEndCpChanges = [this]()
+  { OnEventTrackEndCpChanges(); };
+  m_pEventTrackEditor->m_OnBeginOperation = [this](plStringView sName)
+  { OnEventTrackBeginOperation(sName); };
+  m_pEventTrackEditor->m_OnEndOperation = [this](bool bCommit)
+  { OnEventTrackEndOperation(bCommit); };
+}
+
+plObjectAccessorBase* plSequenceAssetDocumentWindow::GetObjectAccessor()
 {
   return GetDocument()->GetObjectAccessor();
 }
 
 // ---- curve editor dock -----------------------------------------------------
 
-void plQtSequenceAssetDocumentWindow::SequenceEventHandler(const plSequenceAssetEvent& e)
+void plSequenceAssetDocumentWindow::SequenceEventHandler(const plSequenceAssetEvent& e)
 {
   switch (e.m_Type)
   {
     case plSequenceAssetEvent::Type::ScrubberPositionChanged:
     {
       const plUInt64 uiTick = static_cast<const plSequenceAssetDocument*>(e.m_pDocument)->GetScrubberPosition();
-      m_pCurveEditor->SetScrubberPosition(uiTick);
-      m_pEventTrackEditor->SetScrubberPosition(uiTick);
+      const double fSeconds = static_cast<double>(uiTick) / static_cast<double>(plSequenceTicksPerSecond);
+      m_pCurveEditor->SetScrubberPosition(fSeconds);
+      m_pEventTrackEditor->SetScrubberPosition(fSeconds);
       break;
     }
     case plSequenceAssetEvent::Type::DurationChanged:
@@ -205,7 +127,7 @@ void plQtSequenceAssetDocumentWindow::SequenceEventHandler(const plSequenceAsset
   }
 }
 
-void plQtSequenceAssetDocumentWindow::CommandHistoryEventHandler(const plCommandHistoryEvent& e)
+void plSequenceAssetDocumentWindow::CommandHistoryEventHandler(const plCommandHistoryEvent& e)
 {
   if (e.m_Type == plCommandHistoryEvent::Type::TransactionEnded || e.m_Type == plCommandHistoryEvent::Type::UndoEnded ||
       e.m_Type == plCommandHistoryEvent::Type::RedoEnded)
@@ -215,7 +137,7 @@ void plQtSequenceAssetDocumentWindow::CommandHistoryEventHandler(const plCommand
   }
 }
 
-void plQtSequenceAssetDocumentWindow::onTrackSelectionChanged()
+void plSequenceAssetDocumentWindow::OnTrackSelectionChanged()
 {
   const plUuid selected = m_pSequencerPanel->GetSelectedTrack();
   if (m_SelectedTrackGuid == selected)
@@ -225,7 +147,7 @@ void plQtSequenceAssetDocumentWindow::onTrackSelectionChanged()
   UpdateCurveEditor();
 }
 
-void plQtSequenceAssetDocumentWindow::onKeyPicked(plUuid trackGuid, plUuid cpGuid)
+void plSequenceAssetDocumentWindow::OnKeyPicked(const plUuid& trackGuid, const plUuid& cpGuid)
 {
   if (m_SelectedTrackGuid != trackGuid)
   {
@@ -257,13 +179,13 @@ void plQtSequenceAssetDocumentWindow::onKeyPicked(plUuid trackGuid, plUuid cpGui
       plSelectedCurveCP cp;
       cp.m_uiCurve = 0;
       cp.m_uiPoint = (plUInt16)i;
-      m_pCurveEditor->CurveEdit->SetSelection(cp);
+      m_pCurveEditor->SetSelection(plMakeArrayPtr(&cp, 1));
       return;
     }
   }
 }
 
-void plQtSequenceAssetDocumentWindow::UpdateCurveEditor()
+void plSequenceAssetDocumentWindow::UpdateCurveEditor()
 {
   plSequenceAssetDocument* pDoc = static_cast<plSequenceAssetDocument*>(GetDocument());
 
@@ -299,19 +221,50 @@ void plQtSequenceAssetDocumentWindow::UpdateCurveEditor()
     }
   }
 
+  // the curve list names each curve by its property and axis
+  plHybridArray<plString, 4> names;
+  for (const plUuid& trackGuid : m_CurveTrackGuids)
+  {
+    const plSequenceTrack* pTrack = pDoc->GetTrack(trackGuid);
+    plStringBuilder sName = pTrack->m_sPropertyPath;
+    sName.TrimWordStart("Local");
+    switch (pTrack->m_Target.GetValue())
+    {
+      case plPropertyAnimTarget::VectorX:
+      case plPropertyAnimTarget::RotationX:
+        sName.Append(".X");
+        break;
+      case plPropertyAnimTarget::VectorY:
+      case plPropertyAnimTarget::RotationY:
+        sName.Append(".Y");
+        break;
+      case plPropertyAnimTarget::VectorZ:
+      case plPropertyAnimTarget::RotationZ:
+        sName.Append(".Z");
+        break;
+      case plPropertyAnimTarget::VectorW:
+        sName.Append(".W");
+        break;
+      default:
+        break;
+    }
+    names.PushBack(sName);
+  }
+
   m_pCurveEditor->SetCurveExtents(0, pDoc->GetDuration().GetSeconds(), true, true);
   m_pCurveEditor->SetCurves(m_CurvesToDisplay);
-  m_pCurveEditor->SetScrubberPosition(pDoc->GetScrubberPosition());
+  m_pCurveEditor->SetCurveNames(names, "Selected track");
+  m_pCurveEditor->SetScrubberPosition(static_cast<double>(pDoc->GetScrubberPosition()) / static_cast<double>(plSequenceTicksPerSecond));
 }
 
-plUuid plQtSequenceAssetDocumentWindow::GetCurveTrackGuid(plUInt32 uiCurveIdx) const
+plUuid plSequenceAssetDocumentWindow::GetCurveTrackGuid(plUInt32 uiCurveIdx) const
 {
   // With a vector group selected the dock shows several curves, so which track an edit belongs to
   // comes from the curve index the widget reports, not from "the" selected track.
   return uiCurveIdx < m_CurveTrackGuids.GetCount() ? m_CurveTrackGuids[uiCurveIdx] : plUuid();
 }
 
-plUuid plQtSequenceAssetDocumentWindow::GetCurveCpGuid(plUInt32 uiCurveIdx, plUInt32 uiCpIdx) const
+plUuid plSequenceAssetDocumentWindow::GetCurveCpGuid(plUInt32 uiCurveIdx, plUInt32 uiCpIdx) const
 {
   const plUuid trackGuid = GetCurveTrackGuid(uiCurveIdx);
   if (!trackGuid.IsValid())
@@ -336,7 +289,7 @@ plUuid plQtSequenceAssetDocumentWindow::GetCurveCpGuid(plUInt32 uiCurveIdx, plUI
   return cpGuid.Get<plUuid>();
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveInsertCpAt(plUInt32 uiCurveIdx, plInt64 iTickX, double fClickPosY)
+void plSequenceAssetDocumentWindow::InsertCp(plUInt32 uiCurveIdx, plInt64 iTickX, double fClickPosY)
 {
   const plUuid trackGuid = GetCurveTrackGuid(uiCurveIdx);
   if (!trackGuid.IsValid())
@@ -345,7 +298,7 @@ void plQtSequenceAssetDocumentWindow::onCurveInsertCpAt(plUInt32 uiCurveIdx, plI
   static_cast<plSequenceAssetDocument*>(GetDocument())->InsertCurveCpAt(trackGuid, iTickX, fClickPosY);
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveCpMoved(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, plInt64 iTickX, double fNewPosY)
+void plSequenceAssetDocumentWindow::CpMoved(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, plInt64 iTickX, double fNewPosY)
 {
 
 
@@ -367,7 +320,7 @@ void plQtSequenceAssetDocumentWindow::onCurveCpMoved(plUInt32 uiCurveIdx, plUInt
   GetDocument()->GetCommandHistory()->AddCommand(cmdSet).AssertSuccess();
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveCpDeleted(plUInt32 uiCurveIdx, plUInt32 uiCpIdx)
+void plSequenceAssetDocumentWindow::CpDeleted(plUInt32 uiCurveIdx, plUInt32 uiCpIdx)
 {
 
 
@@ -380,7 +333,7 @@ void plQtSequenceAssetDocumentWindow::onCurveCpDeleted(plUInt32 uiCurveIdx, plUI
   GetDocument()->GetCommandHistory()->AddCommand(cmdRemove).AssertSuccess();
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveTangentMoved(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, float fNewPosX, float fNewPosY, bool bRightTangent)
+void plSequenceAssetDocumentWindow::TangentMoved(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, float fNewPosX, float fNewPosY, bool bRightTangent)
 {
 
 
@@ -401,7 +354,7 @@ void plQtSequenceAssetDocumentWindow::onCurveTangentMoved(plUInt32 uiCurveIdx, p
   GetDocument()->GetCommandHistory()->AddCommand(cmdSet).AssertSuccess();
 }
 
-void plQtSequenceAssetDocumentWindow::onLinkCurveTangents(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, bool bLink)
+void plSequenceAssetDocumentWindow::TangentLink(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, bool bLink)
 {
   const plUuid cpGuid = GetCurveCpGuid(uiCurveIdx, uiCpIdx);
   if (!cpGuid.IsValid())
@@ -421,13 +374,13 @@ void plQtSequenceAssetDocumentWindow::onLinkCurveTangents(plUInt32 uiCurveIdx, p
       if (uiCpIdx < pTrack->m_FloatCurve.m_ControlPoints.GetCount())
       {
         const plVec2 leftTangent = pTrack->m_FloatCurve.m_ControlPoints[uiCpIdx].m_LeftTangent;
-        onCurveTangentMoved(uiCurveIdx, uiCpIdx, -leftTangent.x, -leftTangent.y, true);
+        TangentMoved(uiCurveIdx, uiCpIdx, -leftTangent.x, -leftTangent.y, true);
       }
     }
   }
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveTangentModeChanged(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, bool bRightTangent, int iMode)
+void plSequenceAssetDocumentWindow::CpTangentMode(plUInt32 uiCurveIdx, plUInt32 uiCpIdx, bool bRightTangent, int iMode)
 {
 
 
@@ -442,12 +395,12 @@ void plQtSequenceAssetDocumentWindow::onCurveTangentModeChanged(plUInt32 uiCurve
   GetDocument()->GetCommandHistory()->AddCommand(cmd).AssertSuccess();
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveBeginOperation(QString sName)
+void plSequenceAssetDocumentWindow::BeginOperation(plStringView sName)
 {
-  GetDocument()->GetCommandHistory()->BeginTemporaryCommands(sName.toUtf8().data());
+  GetDocument()->GetCommandHistory()->BeginTemporaryCommands(sName);
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveEndOperation(bool bCommit)
+void plSequenceAssetDocumentWindow::EndOperation(bool bCommit)
 {
   if (bCommit)
     GetDocument()->GetCommandHistory()->FinishTemporaryCommands();
@@ -459,14 +412,14 @@ void plQtSequenceAssetDocumentWindow::onCurveEndOperation(bool bCommit)
 
 // ---- event track dock ------------------------------------------------------
 
-void plQtSequenceAssetDocumentWindow::UpdateEventTrackEditor()
+void plSequenceAssetDocumentWindow::UpdateEventTrackEditor()
 {
   plSequenceAssetDocument* pDoc = static_cast<plSequenceAssetDocument*>(GetDocument());
   m_pEventTrackEditor->SetData(pDoc->GetProperties()->m_EventTrack, pDoc->GetDuration().GetSeconds());
-  m_pEventTrackEditor->SetScrubberPosition(pDoc->GetScrubberPosition());
+  m_pEventTrackEditor->SetScrubberPosition(static_cast<double>(pDoc->GetScrubberPosition()) / static_cast<double>(plSequenceTicksPerSecond));
 }
 
-plUuid plQtSequenceAssetDocumentWindow::GetEventCpGuid(plUInt32 uiIndex) const
+plUuid plSequenceAssetDocumentWindow::GetEventCpGuid(plUInt32 uiIndex) const
 {
   plSequenceAssetDocument* pDoc = static_cast<plSequenceAssetDocument*>(GetDocument());
 
@@ -478,12 +431,12 @@ plUuid plQtSequenceAssetDocumentWindow::GetEventCpGuid(plUInt32 uiIndex) const
   return cpGuid.IsA<plUuid>() ? cpGuid.Get<plUuid>() : plUuid();
 }
 
-void plQtSequenceAssetDocumentWindow::onEventTrackInsertCpAt(plInt64 iTickX, QString sValue)
+void plSequenceAssetDocumentWindow::OnEventTrackInsertCpAt(plInt64 iTickX, plStringView sValue)
 {
-  static_cast<plSequenceAssetDocument*>(GetDocument())->InsertEventTrackCpAt(plMath::Max<plInt64>(iTickX, 0), sValue.toUtf8().data());
+  static_cast<plSequenceAssetDocument*>(GetDocument())->InsertEventTrackCpAt(plMath::Max<plInt64>(iTickX, 0), plString(sValue).GetData());
 }
 
-void plQtSequenceAssetDocumentWindow::onEventTrackCpMoved(plUInt32 uiCpIdx, plInt64 iTickX)
+void plSequenceAssetDocumentWindow::OnEventTrackCpMoved(plUInt32 uiCpIdx, plInt64 iTickX)
 {
   const plUuid cpGuid = GetEventCpGuid(uiCpIdx);
   if (!cpGuid.IsValid())
@@ -496,7 +449,7 @@ void plQtSequenceAssetDocumentWindow::onEventTrackCpMoved(plUInt32 uiCpIdx, plIn
   GetDocument()->GetCommandHistory()->AddCommand(cmd).AssertSuccess();
 }
 
-void plQtSequenceAssetDocumentWindow::onEventTrackCpDeleted(plUInt32 uiCpIdx)
+void plSequenceAssetDocumentWindow::OnEventTrackCpDeleted(plUInt32 uiCpIdx)
 {
   const plUuid cpGuid = GetEventCpGuid(uiCpIdx);
   if (!cpGuid.IsValid())
@@ -507,23 +460,23 @@ void plQtSequenceAssetDocumentWindow::onEventTrackCpDeleted(plUInt32 uiCpIdx)
   GetDocument()->GetCommandHistory()->AddCommand(cmd).AssertSuccess();
 }
 
-void plQtSequenceAssetDocumentWindow::onEventTrackBeginCpChanges(QString sName)
+void plSequenceAssetDocumentWindow::OnEventTrackBeginCpChanges(plStringView sName)
 {
-  GetDocument()->GetCommandHistory()->StartTransaction(sName.toUtf8().data());
+  GetDocument()->GetCommandHistory()->StartTransaction(sName);
 }
 
-void plQtSequenceAssetDocumentWindow::onEventTrackEndCpChanges()
+void plSequenceAssetDocumentWindow::OnEventTrackEndCpChanges()
 {
   GetDocument()->GetCommandHistory()->FinishTransaction();
   UpdateEventTrackEditor();
 }
 
-void plQtSequenceAssetDocumentWindow::onEventTrackBeginOperation(QString sName)
+void plSequenceAssetDocumentWindow::OnEventTrackBeginOperation(plStringView sName)
 {
-  GetDocument()->GetCommandHistory()->BeginTemporaryCommands(sName.toUtf8().data());
+  GetDocument()->GetCommandHistory()->BeginTemporaryCommands(sName);
 }
 
-void plQtSequenceAssetDocumentWindow::onEventTrackEndOperation(bool bCommit)
+void plSequenceAssetDocumentWindow::OnEventTrackEndOperation(bool bCommit)
 {
   if (bCommit)
     GetDocument()->GetCommandHistory()->FinishTemporaryCommands();
@@ -534,19 +487,19 @@ void plQtSequenceAssetDocumentWindow::onEventTrackEndOperation(bool bCommit)
 }
 
 
-void plQtSequenceAssetDocumentWindow::onCurveBeginCpChanges(QString sName)
+void plSequenceAssetDocumentWindow::BeginCpChanges(plStringView sName)
 {
-  GetDocument()->GetCommandHistory()->StartTransaction(sName.toUtf8().data());
+  GetDocument()->GetCommandHistory()->StartTransaction(sName);
 }
 
-void plQtSequenceAssetDocumentWindow::onCurveEndCpChanges()
+void plSequenceAssetDocumentWindow::EndCpChanges()
 {
   GetDocument()->GetCommandHistory()->FinishTransaction();
 
   UpdateCurveEditor();
 }
 
-void plQtSequenceAssetDocumentWindow::InternalRedraw()
+void plSequenceAssetDocumentWindow::InternalRedraw()
 {
   plSequenceAssetDocument* pDoc = static_cast<plSequenceAssetDocument*>(GetDocument());
   pDoc->ExecuteAnimationPlaybackStep();
@@ -625,5 +578,5 @@ void plQtSequenceAssetDocumentWindow::InternalRedraw()
       pView->SyncToEngine();
     }
   }
-  plQtEngineDocumentWindow::InternalRedraw();
+  plEngineDocumentWindow::InternalRedraw();
 }

@@ -3,7 +3,7 @@
 #include <Core/World/GameObject.h>
 #include <EditorFramework/IPC/IPCObjectMirrorEditor.h>
 #include <EditorFramework/Object/ObjectPropertyPath.h>
-#include <GuiFoundation/UIServices/UIServices.moc.h>
+#include <GuiFoundation/UIServices/UIServices.h>
 #include <EditorPluginSequencer/SequenceAsset/SequenceAsset.h>
 #include <EditorPluginSequencer/SequenceAsset/SequenceObjectAccessor.h>
 #include <EditorPluginSequencer/SequenceAsset/SequenceObjectManager.h>
@@ -969,7 +969,7 @@ plUuid plSequenceAssetDocument::AddBindingForContextObject(const plDocumentObjec
 
   if (plStatus status = DeriveBindingPath(pObject, sName, sSearchSequence); status.Failed())
   {
-    plQtUiServices::GetSingleton()->MessageBoxInformation(plFmt("{}", status.m_sMessage));
+    plEditorUiServices::MessageBoxInformation(plFmt("{}", status.m_sMessage));
     return plUuid();
   }
 
@@ -1738,7 +1738,7 @@ plUuid plSequenceAssetDocument::AddCameraCut(const plDocumentObject* pCameraObje
   // than storing a cut with an empty path that silently does nothing.
   if (sObjectPath.IsEmpty())
   {
-    plQtUiServices::GetSingleton()->MessageBoxInformation(
+    plEditorUiServices::MessageBoxInformation(
       plFmt("This camera object has no name, so the sequence cannot find it again.\n\n"
             "Give the object a name in the scene, save the scene, then add the cut."));
     return plUuid();

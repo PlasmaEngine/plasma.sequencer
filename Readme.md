@@ -21,7 +21,7 @@ follow the phased roadmap in the plan.
   `plSceneContext` subclass registered for document type "Sequence" (the same mechanism
   PropertyAnim uses, which plSceneContext serves under "Scene;Prefab;PropertyAnim").
 - `Source/EditorPluginSequencer/` — editor UI: document, manager, window.
-
+- `EditorIcons/` — editor icons by icon id (`:/AssetIcons/Sequence.svg` is `AssetIcons/Sequence.svg`).
 ## Building
 
 Out of tree, against a **built** engine SDK:

@@ -18,7 +18,8 @@ public class EditorPluginSequencerModule : ModuleRules
         PrivateIncludePaths.Add(Path.Combine(PlasmaPackageSdk.Root, "Code", "EditorPlugins", "Assets"));
         PlasmaPackageSdk.AddImportLibrary(this, context, "plEditorPluginAssets");
 
-        PlasmaPackageQt.ConfigureQtModule(this, context, "EditorPluginSequencerModule",
-            "Source/EditorPluginSequencer", "Core", "Gui", "Widgets");
+        // The transport strip, track view and menus are engine-drawn: EditorUi and the retained UI runtime.
+        PlasmaPackageSdk.AddImportLibrary(this, context, "plEditorUi");
+        PlasmaPackageSdk.AddImportLibrary(this, context, "plGameUiPlugin");
     }
 }

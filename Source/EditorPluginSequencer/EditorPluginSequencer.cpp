@@ -8,11 +8,37 @@
 #include <EditorFramework/Actions/QuadViewActions.h>
 #include <EditorFramework/Actions/TransformGizmoActions.h>
 #include <EditorFramework/Actions/ViewActions.h>
+#include <EditorPluginSequencer/SequenceAsset/SequenceShellPanels.h>
 #include <GuiFoundation/Action/ActionMapManager.h>
 #include <GuiFoundation/Action/CommandHistoryActions.h>
 #include <GuiFoundation/Action/DocumentActions.h>
 #include <GuiFoundation/Action/EditActions.h>
 #include <GuiFoundation/Action/StandardMenus.h>
+#include <EditorUi/Widgets.h>
+#include <Foundation/Configuration/Plugin.h>
+
+/// The package's icon folder: the icons under their ids (":/AssetIcons/Sequence.svg" is
+/// "EditorIcons/AssetIcons/Sequence.svg"). The plugin binary lives in <package>/Bin/<configuration>.
+static plString s_sIconFolder;
+
+static void RegisterIconFolder()
+{
+  plStringBuilder sPlugin, sCopy;
+  plPlugin::GetPluginPaths("plEditorPluginSequencer", sPlugin, sCopy, 0);
+
+  plStringBuilder sFolder = sPlugin.GetFileDirectory();
+  sFolder.AppendPath("..", "..", "EditorIcons");
+  sFolder.MakeCleanPath();
+
+  s_sIconFolder = sFolder;
+  plEditorUi::AddIconFolder(s_sIconFolder);
+}
+
+static void UnregisterIconFolder()
+{
+  plEditorUi::RemoveIconFolder(s_sIconFolder);
+  s_sIconFolder.Clear();
+}
 
 static void ConfigureSequenceAsset()
 {
@@ -62,7 +88,15 @@ static void ConfigureSequenceAsset()
 
 PL_PLUGIN_ON_LOADED()
 {
+  RegisterIconFolder();
   ConfigureSequenceAsset();
+  plSequenceShellPanels::Register();
+}
+
+PL_PLUGIN_ON_UNLOADED()
+{
+  plSequenceShellPanels::Unregister();
+  UnregisterIconFolder();
 }
 
 PL_STATICLINK_FILE(EditorPluginSequencer, EditorPluginSequencer_EditorPluginSequencer);
